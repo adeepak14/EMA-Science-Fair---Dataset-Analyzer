@@ -1,0 +1,51 @@
+#EMA Science fair project - Abhinav Deepak
+import io
+import time
+import warnings
+
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import streamlit as st
+
+st.set_page_config(page_title="Universal CSV Data Analytics Engine - Abhinav D", page_icon="📊", layout="wide")
+st.title("Universal CSV Data Analytics Engine")
+st.header("For the EMA 2026 Science Fair - By: Abhinav Deepak")
+st.divider()
+st.write("What the app does is it takes a dataset YOU input, and returns a few graphs, helping you analyze it.")
+st.caption("Data is NOT saved by the website - upload anything you need")
+st.divider()
+st.header("1. Upload and Health Check")
+uploaded = st.file_uploader("File opener", type = "csv")
+if uploaded is None:
+    st.info("Please upload a file")
+    st.stop()
+def load_csv(raw_bytes):
+    try:
+        return pd.read_csv(io.BytesIO(raw_bytes), encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        return pd.read_csv(io.BytesIO(raw_bytes), encoding="latin-1")
+try:
+    df = load_csv(uploaded.getvalue())
+except (pd.errors.EmptyDataError, pd.errors.ParserError) as err:
+    st.error("An Error Occurred, please reupload: {err}")
+    st.stop()
+print("Is this your dataset?")
+#st.write(df.shape)
+st.dataframe(df.head(20))
+if st.button("Yes"):
+    correctDataset=True
+elif st.button("No"):
+    print("please reupload then, after reopening the page")
+    st.stop()
+
+if correctDataset == True:
+    st.header("2. Data Cleaning")
+    numeric_cols = df.select_dtypes("number").columns
+    df[numeric_cols] = df[numeric_cols].fillna(0)
+    print1("Disclaimer: All missing numbers and strings are replaced with 0 and Nan, respectively. No data substitution will be done")
+    st.header("3. The Graphs")
+
+    st.header("4. Interactive Visuals")
+    
+

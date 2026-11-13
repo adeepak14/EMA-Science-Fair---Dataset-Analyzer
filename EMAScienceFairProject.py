@@ -90,7 +90,6 @@ if correctDataset == True:
     show_scatterplot = st.checkbox("Scatter Plot")
     show_scattermatrix = st.checkbox("Scatter Matrix")
     show_bar = st.checkbox("Bar Graph")
-    show_timeseries = st.checkbox("Time Series")
     #graph generation
     if show_heatmap:
         if len(numeric) >= 2:
@@ -128,20 +127,43 @@ if correctDataset == True:
             st.info("A scatter matrix needs at least 3 numeric columns.")
     
     if show_bar:
-        if text:
-            cat_col = st.selectbox("Category", text)
-            counts = df[cat_col].value_counts().head(20).reset_index()
-            fig = px.bar(counts, x=cat_col, y="count", title=f"Most common values in {cat_col}")
-            st.plotly_chart(fig)
-        else:
-            st.info("A bar chart needs at least 1 text column.")
-    if show_timeseries:
-        if dates and numeric:
-            date_col = st.selectbox("Date column", dates)
-            value_col = st.selectbox("Value over time", numeric)
-            line_df = df.sort_values(date_col)
-            fig = px.line(line_df, date_col, value_col)
-            st.plotly_chart(fig)
-        else:
-            st.info("A Time Series needs a date and at least 1 numeric column")
+        bar_mode = st.radio(
+            "Bar chart type",
+            ["Count per category", "Numeric value per category", "Numeric value in ranges"],
+            horizontal=True,
+        )
 
+        if bar_mode == "Count per category":
+            if text:
+                cat_col = st.selectbox("Category (x-axis)", text)
+                counts = df[cat_col].value_counts().head(20).reset_index()
+                fig = px.bar(counts, x=cat_col, y="count",
+                             title=f"Most common values in {cat_col}")
+                st.plotly_chart(fig)
+            else:
+                st.info("This chart needs at least 1 text column.")
+
+        elif bar_mode == "Numeric value per category":
+            if text and numeric:
+                cat_col = st.selectbox("Category (x-axis)", text)
+                val_col = st.selectbox("Value (y-axis)", numeric)
+                how = st.selectbox("Combine values using", ["sum", "mean", "median", "max", "min"])
+                grouped = (df.groupby(cat_col)[val_col].agg(how)
+                           .sort_values(ascending=False).head(20).reset_index())
+                fig = px.bar(grouped, x=cat_col, y=val_col,
+                             title=f"{how.title()} of {val_col} by {cat_col}")
+                st.plotly_chart(fig)
+            else:
+                st.info("This chart needs at least 1 text column and 1 numeric column.")
+
+        else:
+            if numeric:
+                num_col = st.selectbox("Numeric column", numeric)
+                bins = st.slider("Number of bars", 5, 50, 10)
+                ranges = pd.cut(df[num_col], bins=bins).value_counts(sort=False).reset_index()
+                ranges[num_col] = ranges[num_col].astype(str)
+                fig = px.bar(ranges, x=num_col, y="count",
+                             title=f"How many rows fall in each range of {num_col}")
+                st.plotly_chart(fig)
+            else:
+                st.info("This chart needs at least 1 numeric column.")

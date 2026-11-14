@@ -8,6 +8,26 @@ import numpy as np
 import plotly.express as px
 import streamlit as st
 
+COUNT = "Number of rows"
+WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+
+def to_dates(series):
+    """Turn a column into dates; anything that isn't a date becomes missing."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return pd.to_datetime(series, errors="coerce")
+
+
+def find_date_columns(df, threshold=0.8):
+    """Columns where at least 80% of the filled values read as dates."""
+    found = df.select_dtypes("datetime").columns.tolist()
+    for col in df.select_dtypes(exclude=["number", "datetime"]).columns:
+        values = df[col].dropna().astype(str)
+        if not values.empty and to_dates(values).notna().mean() >= threshold:
+            found.append(col)
+    return found
+
 st.set_page_config(page_title="Universal CSV Data Analytics Engine - Abhinav D", page_icon="📊", layout="wide")
 st.title("Universal CSV Data Analytics Engine")
 st.header("For the EMA 2026 Science Fair - By: Abhinav Deepak")
@@ -66,6 +86,7 @@ if correctDataset == True:
     text = df.select_dtypes(exclude=["number", "datetime"]).columns.tolist()
     dates = df.select_dtypes("datetime").columns.tolist()
     plot_df = df.sample(5000, random_state=1) if len(df) > 5000 else df
+    date_cols = find_date_columns(df)
 
     st.header("3. Statistical Insights")
     if numeric:
@@ -90,15 +111,60 @@ if correctDataset == True:
     show_scatterplot = st.checkbox("Scatter Plot")
     show_scattermatrix = st.checkbox("Scatter Matrix")
     show_bar = st.checkbox("Bar Graph")
+    show_share = st.checkbox("Share of total (percent)")
     #graph generation
     if show_heatmap:
-        if len(numeric) >= 2:
-            corr = df[numeric].corr()
-            fig = px.imshow(corr, text_auto=".2f", zmin=-1, zmax=1,
-                        color_continuous_scale="RdBu_r")
-            st.plotly_chart(fig)
+        heat_type = st.radio("Heatmap type", ["Correlation matrix", "Activity calendar"],
+                             horizontal=True, key="heat_type")
+
+        if heat_type == "Correlation matrix":
+            if len(numeric) >= 2:
+                corr = df[numeric].corr()
+                fig = px.imshow(corr, text_auto=".2f", zmin=-1, zmax=1,
+                                color_continuous_scale="RdBu_r")
+                st.plotly_chart(fig)
+            else:
+                st.info("A heatmap needs at least 2 numeric columns")
+
         else:
-            st.info("A heatmap needs at least 2 numeric columns")
+            if date_cols:
+                c1, c2, c3 = st.columns(3)
+                dcol = c1.selectbox("Date column", date_cols, key="cal_date")
+                val = c2.selectbox("Measure", [COUNT] + numeric, key="cal_val")
+                dates_only = df.assign(_date=to_dates(df[dcol]).dt.normalize()).dropna(subset=["_date"])
+                years = sorted(dates_only["_date"].dt.year.unique())
+                if not years:
+                    st.info("No valid dates found in that column.")
+                else:
+                    year = c3.selectbox("Year", years, index=len(years) - 1, key="cal_year")
+                    one_year = dates_only[dates_only["_date"].dt.year == year]
+
+                    # total per day, with 0 for days that have no rows
+                    if val == COUNT:
+                        per_day = one_year.groupby("_date").size()
+                    else:
+                        per_day = one_year.groupby("_date")[val].sum()
+                    days = pd.date_range(f"{year}-01-01", f"{year}-12-31")
+                    per_day = per_day.reindex(days, fill_value=0)
+
+                    # rows = weekday, columns = the Monday that starts each week
+                    cal = pd.DataFrame({
+                        "value": per_day.values,
+                        "weekday": days.dayofweek,
+                        "week": days - pd.to_timedelta(days.dayofweek, unit="D"),
+                    })
+                    grid = cal.pivot(index="weekday", columns="week", values="value")
+                    grid.index = WEEKDAYS
+                    grid.columns = [w.strftime("%b %d") for w in grid.columns]
+
+                    fig = px.imshow(grid, color_continuous_scale="Greens", aspect="auto",
+                                    labels={"x": "Week starting", "y": "", "color": val},
+                                    title=f"{val} per day in {year}")
+                    fig.update_traces(xgap=2, ygap=2)
+                    st.plotly_chart(fig)
+                    st.caption("Darker squares mean more on that day. Blank squares are outside the year.")
+            else:
+                st.info("The activity calendar needs a date column.")
     
     if show_hist:
         if numeric:
@@ -167,3 +233,34 @@ if correctDataset == True:
                 st.plotly_chart(fig)
             else:
                 st.info("This chart needs at least 1 numeric column.")
+        if show_share:
+            if text:
+                c1, c2, c3 = st.columns(3)
+                cat = c1.selectbox("Group by", text, key="share_cat")
+                val = c2.selectbox("Measure", [COUNT] + numeric, key="share_val")
+                style = c3.radio("Style", ["Bar", "Donut"], horizontal=True, key="share_style")
+
+                if val == COUNT:
+                    share = df.groupby(cat).size().reset_index(name=COUNT)
+                else:
+                    share = df.groupby(cat)[val].sum().reset_index()
+                total = share[val].sum()
+    
+                if total > 0:
+                    share["Percent"] = (share[val] / total * 100).round(1)
+                    share = share.sort_values("Percent", ascending=False).head(15)
+                    if style == "Donut":
+                        fig = px.pie(share, names=cat, values=val, hole=0.5,
+                                     title=f"Share of {val} by {cat}")
+                    else:
+                        share = share.sort_values("Percent")
+                        fig = px.bar(share, x="Percent", y=cat, orientation="h",
+                                     text=share["Percent"].astype(str) + "%",
+                                     title=f"Share of {val} by {cat}",
+                                     labels={"Percent": "Percent of total"})
+                    st.plotly_chart(fig)
+                    st.dataframe(share.sort_values("Percent", ascending=False))
+                else:
+                    st.info("The total is 0, so percentages can't be calculated.")
+            else:
+                st.info("This chart needs at least 1 text column.")

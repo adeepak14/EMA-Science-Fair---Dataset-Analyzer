@@ -233,34 +233,33 @@ if correctDataset == True:
                 st.plotly_chart(fig)
             else:
                 st.info("This chart needs at least 1 numeric column.")
-        if show_share:
-            if text:
-                c1, c2, c3 = st.columns(3)
-                cat = c1.selectbox("Group by", text, key="share_cat")
-                val = c2.selectbox("Measure", [COUNT] + numeric, key="share_val")
-                style = c3.radio("Style", ["Bar", "Donut"], horizontal=True, key="share_style")
-
-                if val == COUNT:
-                    share = df.groupby(cat).size().reset_index(name=COUNT)
-                else:
-                    share = df.groupby(cat)[val].sum().reset_index()
-                total = share[val].sum()
-    
-                if total > 0:
-                    share["Percent"] = (share[val] / total * 100).round(1)
-                    share = share.sort_values("Percent", ascending=False).head(15)
-                    if style == "Donut":
-                        fig = px.pie(share, names=cat, values=val, hole=0.5,
-                                     title=f"Share of {val} by {cat}")
-                    else:
-                        share = share.sort_values("Percent")
-                        fig = px.bar(share, x="Percent", y=cat, orientation="h",
-                                     text=share["Percent"].astype(str) + "%",
-                                     title=f"Share of {val} by {cat}",
-                                     labels={"Percent": "Percent of total"})
-                    st.plotly_chart(fig)
-                    st.dataframe(share.sort_values("Percent", ascending=False))
-                else:
-                    st.info("The total is 0, so percentages can't be calculated.")
+    if show_share:
+        if text:
+            c1, c2, c3 = st.columns(3)
+            cat = c1.selectbox("Group by", text, key="share_cat")
+            val = c2.selectbox("Measure", [COUNT] + numeric, key="share_val")
+            style = c3.radio("Style", ["Bar", "Donut"], horizontal=True, key="share_style")
+            if val == COUNT:
+                share = df.groupby(cat).size().reset_index(name=COUNT)
             else:
-                st.info("This chart needs at least 1 text column.")
+                share = df.groupby(cat)[val].sum().reset_index()
+            total = share[val].sum()
+
+            if total > 0:
+                share["Percent"] = (share[val] / total * 100).round(1)
+                share = share.sort_values("Percent", ascending=False).head(15)
+                if style == "Donut":
+                    fig = px.pie(share, names=cat, values=val, hole=0.5,
+                                 title=f"Share of {val} by {cat}")
+                else:
+                    share = share.sort_values("Percent")
+                    fig = px.bar(share, x="Percent", y=cat, orientation="h",
+                                 text=share["Percent"].astype(str) + "%",
+                                 title=f"Share of {val} by {cat}",
+                                 labels={"Percent": "Percent of total"})
+                st.plotly_chart(fig)
+                st.dataframe(share.sort_values("Percent", ascending=False))
+            else:
+                    st.info("The total is 0, so percentages can't be calculated.")
+        else:
+            st.info("This chart needs at least 1 text column.")
